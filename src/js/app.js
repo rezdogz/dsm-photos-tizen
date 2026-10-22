@@ -119,6 +119,88 @@
     }
     return out;
   }
+  /* ---- Save favourites as a Synology Photos album (Personal Space only) ----
+   * One fixed album. It is created the first time and afterwards only new favourites are added,
+   * so un-starring on the TV never removes anything from the album. Shared Space has no album API. */
+  var ALBUM_NAME = 'TV Favourites';
+  var ALBUM_API = 'SYNO.Foto.Browse.NormalAlbum';
+  var albumBusy = false;
+  function idJson(ids) {
+    return JSON.stringify(ids.map(function (x) { var n = Number(x); return isNaN(n) ? x : n; }));
+  }
+  function findAlbum(cb) {
+    pageList(ALBUM_API, { method: 'list' }, 100, 5000, function (err, l) {
+      var i;
+      if (err) { return cb(err); }
+      for (i = 0; i < l.length; i++) { if (l[i].name === ALBUM_NAME) { return cb(null, l[i].id); } }
+      cb(null, null);
+    });
+  }
+  function addToAlbum(albumId, ids, cb) {
+    var i = 0;
+    (function next() {
+      if (i >= ids.length) { return cb(null); }
+      var part = ids.slice(i, i + 100);
+      i += 100;
+      call({ api: ALBUM_API, version: apiVer(ALBUM_API, 1), method: 'add_item', id: albumId, item: idJson(part) },
+        function (err) { if (err) { return cb(err); } next(); });
+    })();
+  }
+  function saveFavsAlbum() {
+    var ids, albumId;
+    if (albumBusy) { return; }
+    if (cfg.source !== 'personal') {
+      showMsg('Albums can only be made in Personal Space. Switch Photos space in Settings.', 5000);
+      return;
+    }
+    ids = listFavs().map(function (f) { return f.id; });
+    if (!ids.length) { showMsg('No favourites to save yet.', 3000); return; }
+    albumBusy = true;
+    function fail(err) {
+      albumBusy = false;
+      showMsg('Could not save album: ' + (err.code === 105
+        ? 'no permission. The DSM user needs to be allowed to create albums in Synology Photos.' : errText(err)), 9000);
+    }
+    function finish(existing) {
+      var have = {}, fresh;
+      existing.forEach(function (it) { have[String(it.id)] = true; });
+      fresh = ids.filter(function (id) { return !have[String(id)]; });
+      if (!fresh.length) {
+        albumBusy = false;
+        showMsg('"' + ALBUM_NAME + '" is already up to date (' + existing.length + ' photos).', 5000);
+        return;
+      }
+      showMsg('Adding ' + fresh.length + (fresh.length === 1 ? ' photo' : ' photos') + ' to "' + ALBUM_NAME + '"…', 0);
+      addToAlbum(albumId, fresh, function (err) {
+        if (err) { return fail(err); }
+        albumBusy = false;
+        showMsg('Added ' + fresh.length + (fresh.length === 1 ? ' new photo' : ' new photos') + ' to the album "' + ALBUM_NAME + '" (' + (existing.length + fresh.length) + ' in total).', 6000);
+      });
+    }
+    function withAlbum() {
+      // photos already in the album (if this lookup fails we simply try to add everything)
+      pageList('SYNO.Foto.Browse.Item', { method: 'list', album_id: albumId }, 500, 50000, function (err, l) {
+        finish(err ? [] : l);
+      });
+    }
+    showMsg('Saving favourites to the album "' + ALBUM_NAME + '"…', 0);
+    findAlbum(function (err, id) {
+      if (err) { return fail(err); }
+      if (id !== null) { albumId = id; return withAlbum(); }
+      call({ api: ALBUM_API, version: apiVer(ALBUM_API, 1), method: 'create', name: ALBUM_NAME }, function (e2, d) {
+        if (e2) { return fail(e2); }
+        var a = d && (d.album || d);
+        if (a && a.id !== undefined) { albumId = a.id; return withAlbum(); }
+        findAlbum(function (e3, id2) {
+          if (e3) { return fail(e3); }
+          if (id2 === null) { return fail({ code: -1, what: ALBUM_API + ' create' }); }
+          albumId = id2;
+          withAlbum();
+        });
+      });
+    });
+  }
+
   /* ---- Favourites file on the NAS (File Station upload/download) ----
    * One small JSON file. The NAS copy wins on connect; if an earlier upload failed
    * (dirty flag) the two are merged first so offline stars are not lost. */
@@ -777,6 +859,9 @@
     if (atRoot) { state.entries.push({ kind: 'favs', isdir: true, name: 'Favourites', key: FAV_KEY }); }
     if (atRoot) { state.entries.push({ kind: 'timeline', isdir: true, name: 'All photos', key: TIMELINE_KEY }); }
     if (atRoot) { state.entries.push({ kind: 'profiles', isdir: true, name: 'Switch profile', key: PROFILES_KEY }); }
+    if (curKey() === FAV_KEY && cfg.source === 'personal' && imgs.length) {
+      state.entries.push({ kind: 'mkalbum', isdir: true, name: 'Save as album' });
+    }
     state.entries = state.entries.concat(dirs);
     state.entries = state.entries.concat(imgs);
 
@@ -818,6 +903,8 @@
       }
     } else if (onProfiles) {
       for (i = 0; i < state.entries.length; i++) { if (state.entries[i].id === profiles.active) { idx = i; break; } }
+    } else if (state.entries.length > 1 && state.entries[0].kind === 'mkalbum') {
+      idx = 1;   // start on the first photo, not the "Save as album" tile
     } else if (atRoot && state.entries.length > 1) {
       idx = 1;   // skip the settings tile
       for (i = 0; i < state.entries.length; i++) { if (state.entries[i].kind === 'favs') { idx = i; break; } }
@@ -845,7 +932,7 @@
     } else if (entry.kind === 'profiles' || entry.kind === 'profile') {
       t.className += ' dir';
       t.innerHTML = ICON_USER;
-    } else if (entry.kind === 'addprofile') {
+    } else if (entry.kind === 'addprofile' || entry.kind === 'mkalbum') {
       t.className += ' dir';
       t.innerHTML = ICON_PLUS;
     } else if (entry.kind === 'favs') {
@@ -1264,6 +1351,7 @@
         if (ent.kind === 'settings') { enterSettings(); }
         else if (ent.kind === 'profile') { switchProfile(ent.id); }
         else if (ent.kind === 'addprofile') { addProfile(); }
+        else if (ent.kind === 'mkalbum') { saveFavsAlbum(); }
         else if (ent.isdir) { openFolder(state.stack.concat([{ key: ent.key, name: ent.name }])); }
         else { list = imageEntries(); openViewer(list, list.indexOf(ent), false); }
         return true;

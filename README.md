@@ -14,6 +14,7 @@ It is a sideloadable `.wgt` app (package `DsmPhotos0.DsmPhotos`) that talks dire
 - **Folders and albums** with thumbnails, alongside the timeline.
 - **Full-screen viewer**: instant preview from the NAS, then the full-resolution file fades in over it. Next photo is preloaded. Optional **slideshow**.
 - **Favourites**: press Up (or Red) on a photo to star it, then open **Favourites** to see only those. Stars are saved to a small JSON file on your NAS, so they survive reinstalls and are shared by every TV using the same account.
+- **Save favourites as an album** (Personal Space): open **Favourites** and choose the **Save as album** tile. The first time it creates a Synology Photos album called "TV Favourites"; after that it only adds your new favourites, so un-starring on the TV never removes photos from the album. To share it, open the album in Synology Photos and share it from there.
 - **Profiles**: save several logins (for example one per family member) and switch with the Blue button. Each profile has its own space, options and favourites.
 - **Personal Space or Shared Space** in Synology Photos, chosen per profile.
 - **Fast on a TV**: only thumbnails near the cursor are loaded, thumbnails are cached on the TV (150 MB, least recently used removed first), and unfinished downloads are cancelled when you move on.
@@ -125,6 +126,7 @@ The photo caption also shows how long the preview and the full-resolution file t
 ## Favourites and profiles
 
 - Stars are stored on the TV immediately and uploaded to the favourites file about a second and a half later. A toast tells you if it worked.
+- **Save as album:** the first tile in Favourites (Personal Space only; Synology has no album API for Shared Space). It needs a DSM user who may create albums in Synology Photos. It is add-only, and it is the one feature that writes to your Photos library. The album calls are based on the Synology Photos web API and are less tested than the rest, so please report problems.
 - On connect, the NAS copy is loaded first. If an earlier upload failed, the TV's unsent stars are merged in and uploaded.
 - If the user has no write access you will see "Saved on this TV only. No write access to ...". Stars still work locally.
 - With several TVs, the last save wins.

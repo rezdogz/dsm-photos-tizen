@@ -12,7 +12,7 @@ SRC, DIST = os.path.join(HERE, 'src'), os.path.join(HERE, 'dist')
 
 TARGETS = [
     dict(name='dsm_photos', wgt='dsm_photos.wgt', title='DSM Photos',
-         package='DsmPhotos0', app='DsmPhotos', wid='DsmPhotos', version='1.5.0',
+         package='DsmPhotos0', app='DsmPhotos', wid='DsmPhotos', version='1.6.0',
          frame=(31, 183, 140), hills=(94, 234, 212)),
 ]
 
