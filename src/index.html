@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080">
+  <title>DSM Photos</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Settings / connect screen -->
+<div id="settings" class="screen">
+  <div class="panel">
+    <h1 id="title">DSM Photos</h1>
+    <p id="sub" class="sub"></p>
+
+    <label class="row"><span>NAS address</span><input id="f-host" type="text" autocomplete="off" placeholder="192.168.1.50"></label>
+    <label class="row"><span>Port</span><input id="f-port" type="text" autocomplete="off" placeholder="5000"></label>
+    <div class="row opt" id="o-proto" tabindex="0"><span>Protocol</span><b class="val"></b></div>
+    <div class="row opt" id="o-source" tabindex="0"><span>Photos space</span><b class="val"></b></div>
+    <div class="row opt" id="o-startview" tabindex="0"><span>Start view</span><b class="val"></b></div>
+    <label class="row"><span>Username</span><input id="f-user" type="text" autocomplete="off" placeholder="read-only DSM user"></label>
+    <label class="row"><span>Password</span><input id="f-pass" type="password" autocomplete="off"></label>
+    <div class="row opt" id="o-interval" tabindex="0"><span>Slideshow interval</span><b class="val"></b></div>
+    <div class="row opt" id="o-quality" tabindex="0"><span>Photo quality</span><b class="val"></b></div>
+    <div class="row opt" id="o-favsync" tabindex="0"><span>Save favourites</span><b class="val"></b></div>
+    <label class="row" id="r-favpath"><span>Favourites file</span><input id="f-favpath" type="text" autocomplete="off"></label>
+
+    <div id="b-connect" class="btn" tabindex="0">Connect</div>
+    <p class="hint">Up / Down: move &nbsp;&middot;&nbsp; Left / Right: change option &nbsp;&middot;&nbsp; OK: edit field or press button</p>
+  </div>
+</div>
+
+<!-- Folder / thumbnail browser -->
+<div id="browser" class="screen hidden">
+  <div class="bar"><div id="crumb"></div><div id="count"></div></div>
+  <div id="grid-wrap">
+    <div id="grid"></div>
+    <div id="empty" class="hidden">No photos or folders here.</div>
+  </div>
+  <div class="foot" id="foot">OK: open &nbsp;&middot;&nbsp; Back: up &nbsp;&middot;&nbsp; Play / Green: slideshow &nbsp;&middot;&nbsp; Yellow: settings &nbsp;&middot;&nbsp; Blue: profiles &nbsp;&middot;&nbsp; In a photo, Up: favourite</div>
+</div>
+
+<!-- Full-screen viewer -->
+<div id="viewer" class="screen hidden">
+  <div id="v-stage"></div>
+  <div id="v-loading" class="hidden">Loading&hellip;</div>
+  <div id="v-star"></div>
+  <div id="v-cap"></div>
+  <div id="v-toast"></div>
+</div>
+
+<div id="msg" class="hidden"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
