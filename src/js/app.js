@@ -148,6 +148,25 @@
         function (err) { if (err) { return cb(err); } next(); });
     })();
   }
+  // Remember (per profile) that the album exists, so the tile can say "Update" instead of "Save".
+  function albumSaved() {
+    try { return localStorage.getItem(APP.storeKey + '.album') === '1'; } catch (e) { return false; }
+  }
+  function setAlbumSaved(on) {
+    try { if (on) { localStorage.setItem(APP.storeKey + '.album', '1'); } else { localStorage.removeItem(APP.storeKey + '.album'); } } catch (e) { /* ignore */ }
+  }
+  function albumLabel() { return albumSaved() ? 'Update ' + ALBUM_NAME : 'Save as album'; }
+  function refreshAlbumTile() {
+    var ent = state.entries[0], lab = state.tiles[0] && state.tiles[0].querySelector('.lab');
+    if (curKey() === FAV_KEY && ent && ent.kind === 'mkalbum' && lab) { ent.name = albumLabel(); lab.textContent = ent.name; }
+  }
+  // Not saved from this TV yet? The album may already exist on the NAS (reinstall, other TV): look once.
+  function checkAlbumExists() {
+    if (albumSaved() || cfg.source !== 'personal') { return; }
+    findAlbum(function (err, id) {
+      if (!err && id !== null) { setAlbumSaved(true); refreshAlbumTile(); }
+    });
+  }
   function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function saveFavsAlbum() {
     var ids, albumId;
@@ -173,12 +192,14 @@
       gone = known ? existing.map(function (it) { return it.id; }).filter(function (id) { return !want[String(id)]; }) : [];
       if (!fresh.length && !gone.length) {
         albumBusy = false;
+        setAlbumSaved(true); refreshAlbumTile();
         showMsg('"' + ALBUM_NAME + '" already matches your favourites (' + plural(existing.length, 'photo') + ').', 5000);
         return;
       }
       showMsg('Updating "' + ALBUM_NAME + '"…', 0);
       function done() {
         albumBusy = false;
+        setAlbumSaved(true); refreshAlbumTile();
         var parts = [];
         if (fresh.length) { parts.push('added ' + fresh.length); }
         if (gone.length) { parts.push('removed ' + gone.length); }
@@ -636,6 +657,7 @@
       localStorage.removeItem(k);
       localStorage.removeItem(k + '.favs');
       localStorage.removeItem(k + '.favdirty');
+      localStorage.removeItem(k + '.album');
     } catch (e) { /* ignore */ }
   }
   // Drop half-made profiles (added but never given a login), except the one we are keeping.
@@ -875,7 +897,7 @@
     if (atRoot) { state.entries.push({ kind: 'timeline', isdir: true, name: 'All photos', key: TIMELINE_KEY }); }
     if (atRoot) { state.entries.push({ kind: 'profiles', isdir: true, name: 'Switch profile', key: PROFILES_KEY }); }
     if (curKey() === FAV_KEY && cfg.source === 'personal' && imgs.length) {
-      state.entries.push({ kind: 'mkalbum', isdir: true, name: 'Save as album' });
+      state.entries.push({ kind: 'mkalbum', isdir: true, name: albumLabel() });
     }
     state.entries = state.entries.concat(dirs);
     state.entries = state.entries.concat(imgs);
@@ -927,6 +949,7 @@
     state.focus = -1;
     setFocus(idx);
     pumpThumbs();
+    if (state.entries.length && state.entries[0].kind === 'mkalbum') { checkAlbumExists(); }
   }
 
   function updateCount() {
