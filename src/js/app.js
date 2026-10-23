@@ -120,8 +120,9 @@
     return out;
   }
   /* ---- Save favourites as a Synology Photos album (Personal Space only) ----
-   * One fixed album. It is created the first time and afterwards only new favourites are added,
-   * so un-starring on the TV never removes anything from the album. Shared Space has no album API. */
+   * One fixed album that is kept equal to the favourites each time you save it: new stars are added
+   * and un-starred photos are removed from the album (never deleted from the library).
+   * Shared Space has no album API. */
   var ALBUM_NAME = 'TV Favourites';
   var ALBUM_API = 'SYNO.Foto.Browse.NormalAlbum';
   var albumBusy = false;
@@ -136,16 +137,18 @@
       cb(null, null);
     });
   }
-  function addToAlbum(albumId, ids, cb) {
+  // method: 'add_item' or 'delete_item', in batches of 100 photos
+  function changeAlbum(method, albumId, ids, cb) {
     var i = 0;
     (function next() {
       if (i >= ids.length) { return cb(null); }
       var part = ids.slice(i, i + 100);
       i += 100;
-      call({ api: ALBUM_API, version: apiVer(ALBUM_API, 1), method: 'add_item', id: albumId, item: idJson(part) },
+      call({ api: ALBUM_API, version: apiVer(ALBUM_API, 1), method: method, id: albumId, item: idJson(part) },
         function (err) { if (err) { return cb(err); } next(); });
     })();
   }
+  function plural(n, w) { return n + ' ' + w + (n === 1 ? '' : 's'); }
   function saveFavsAlbum() {
     var ids, albumId;
     if (albumBusy) { return; }
@@ -161,26 +164,38 @@
       showMsg('Could not save album: ' + (err.code === 105
         ? 'no permission. The DSM user needs to be allowed to create albums in Synology Photos.' : errText(err)), 9000);
     }
-    function finish(existing) {
-      var have = {}, fresh;
+    // Make the album match the favourites: add the new ones, remove the ones no longer starred.
+    function finish(existing, known) {
+      var have = {}, want = {}, fresh, gone;
       existing.forEach(function (it) { have[String(it.id)] = true; });
+      ids.forEach(function (id) { want[String(id)] = true; });
       fresh = ids.filter(function (id) { return !have[String(id)]; });
-      if (!fresh.length) {
+      gone = known ? existing.map(function (it) { return it.id; }).filter(function (id) { return !want[String(id)]; }) : [];
+      if (!fresh.length && !gone.length) {
         albumBusy = false;
-        showMsg('"' + ALBUM_NAME + '" is already up to date (' + existing.length + ' photos).', 5000);
+        showMsg('"' + ALBUM_NAME + '" already matches your favourites (' + plural(existing.length, 'photo') + ').', 5000);
         return;
       }
-      showMsg('Adding ' + fresh.length + (fresh.length === 1 ? ' photo' : ' photos') + ' to "' + ALBUM_NAME + '"…', 0);
-      addToAlbum(albumId, fresh, function (err) {
-        if (err) { return fail(err); }
+      showMsg('Updating "' + ALBUM_NAME + '"…', 0);
+      function done() {
         albumBusy = false;
-        showMsg('Added ' + fresh.length + (fresh.length === 1 ? ' new photo' : ' new photos') + ' to the album "' + ALBUM_NAME + '" (' + (existing.length + fresh.length) + ' in total).', 6000);
+        var parts = [];
+        if (fresh.length) { parts.push('added ' + fresh.length); }
+        if (gone.length) { parts.push('removed ' + gone.length); }
+        showMsg('Album "' + ALBUM_NAME + '" updated: ' + parts.join(', ') + ' (' + plural(existing.length + fresh.length - gone.length, 'photo') + ' in total).', 6000);
+      }
+      changeAlbum('add_item', albumId, fresh, function (err) {
+        if (err) { return fail(err); }
+        changeAlbum('delete_item', albumId, gone, function (e2) {
+          if (e2) { return fail(e2); }
+          done();
+        });
       });
     }
     function withAlbum() {
-      // photos already in the album (if this lookup fails we simply try to add everything)
+      // photos already in the album; if this lookup fails we only add and never remove
       pageList('SYNO.Foto.Browse.Item', { method: 'list', album_id: albumId }, 500, 50000, function (err, l) {
-        finish(err ? [] : l);
+        finish(err ? [] : l, !err);
       });
     }
     showMsg('Saving favourites to the album "' + ALBUM_NAME + '"…', 0);
@@ -1385,6 +1400,18 @@
     return false;
   }
 
+  // In the Favourites view, take un-starred photos off the screen and land on the nearest one still starred.
+  function refreshFavsView(cur) {
+    var es = state.entries, i = es.indexOf(cur), j, k, pick = null, stale = false;
+    for (k = 0; k < es.length; k++) { if (!es[k].isdir && !isFav(es[k])) { stale = true; break; } }
+    if (!stale) { return false; }
+    if (i < 0) { i = 0; }
+    for (j = i; j < es.length && !pick; j++) { if (!es[j].isdir && isFav(es[j])) { pick = es[j]; } }
+    for (j = i - 1; j >= 0 && !pick; j--) { if (!es[j].isdir && isFav(es[j])) { pick = es[j]; } }
+    openFolder(state.stack, pick ? pick.name : undefined);
+    return true;
+  }
+
   // Toggle the star and keep the grid badge and the viewer indicator in sync.
   function starEntry(e) {
     var on = toggleFav(e), i = state.entries.indexOf(e);
@@ -1394,6 +1421,7 @@
       $('v-star').classList.toggle('show', on);
       toast(on ? 'Added to favourites' : 'Removed from favourites');
     } else {
+      if (!on && curKey() === FAV_KEY) { refreshFavsView(e); }
       showMsg(on ? 'Added to favourites' : 'Removed from favourites', 1200);
     }
   }
@@ -1499,6 +1527,7 @@
     var cur = viewer.list[viewer.index];
     show('browser');
     restoreGrid();
+    if (curKey() === FAV_KEY && refreshFavsView(cur)) { return; }   // drop photos un-starred in the viewer
     var i = state.entries.indexOf(cur);
     if (i >= 0) { setFocus(i); }
   }
